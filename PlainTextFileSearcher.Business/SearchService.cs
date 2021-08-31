@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace PlainTextFileSearcher.Business
@@ -11,18 +12,25 @@ namespace PlainTextFileSearcher.Business
         private List<string> filePaths = new List<string>();
         private List<Tuple<int, int, string>> allResults = new List<Tuple<int, int, string>>();
         private string searchWord;
+        private CancellationToken cancellationToken;
 
-        public SearchService(string startPath, string searchWord)
+        public SearchService(string startPath, string searchWord, CancellationToken token)
         {
             filePaths.AddRange(Directory.GetFiles(startPath, "*", SearchOption.AllDirectories));
             this.searchWord = searchWord;
+            cancellationToken = token;
         }
 
-        public async Task<List<Tuple<int, int, string>>> FindInAllFiles()
+        public List<Tuple<int, int, string>> FindInAllFiles()
         {
             for (int i = 0; i < filePaths.Count; i++)
             {
-                var fileResults = await FindInFile(filePaths[i]);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return allResults;
+                }
+
+                var fileResults = FindInFile(filePaths[i]);
 
                 var fileResultsCount = fileResults.Count;
 
@@ -35,14 +43,19 @@ namespace PlainTextFileSearcher.Business
             return allResults;
         }
 
-        private async Task<List<Tuple<int, int>>> FindInFile(string filePath)
+        private List<Tuple<int, int>> FindInFile(string filePath)
         {
             var lines = File.ReadAllLines(filePath);
             var fileResults = new List<Tuple<int, int>>();
 
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return fileResults;
+            }
+
             for (int i = 0; i < lines.Length; i++)
             {
-                List<int> lineResults = await FindAllInString(lines[i]);
+                List<int> lineResults = FindAllInString(lines[i]);
 
                 for (int r = 0; r < lineResults.Count; r++)
                 {
@@ -53,7 +66,7 @@ namespace PlainTextFileSearcher.Business
             return fileResults;
         }
 
-        private Task<List<int>> FindAllInString(string line)
+        private List<int> FindAllInString(string line)
         {
             List<int> results = new List<int>();
             int nextIndex = 0;
@@ -68,7 +81,7 @@ namespace PlainTextFileSearcher.Business
                 }
             }
 
-            return Task.FromResult(results);
+            return results;
         }
 
         private int NextIndexOf(string input, int startIndex)
